@@ -7,9 +7,9 @@ from __future__ import annotations
 
 import streamlit as st
 
-from lib import config as cfg
-from lib import data as d
-from lib import ui
+from .lib import config as cfg
+from .lib import data as d
+from .lib import ui
 
 ui.setup_page("Inicio")
 ui.page_header("Farmapricing", "Centro de decisiones de pricing y surtido")
