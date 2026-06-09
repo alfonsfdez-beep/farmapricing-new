@@ -5,11 +5,17 @@ Punto de entrada. Streamlit detecta automáticamente las páginas en /pages.
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import streamlit as st
 
-from .lib import config as cfg
-from .lib import data as d
-from .lib import ui
+# Agregar la carpeta app al path para que los imports funcionen
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from lib import config as cfg
+from lib import data as d
+from lib import ui
 
 ui.setup_page("Inicio")
 ui.page_header("Farmapricing", "Centro de decisiones de pricing y surtido")
