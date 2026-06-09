@@ -55,10 +55,12 @@ def connect_sql(db_name):
     raise RuntimeError(f"No se pudo conectar a {db_name}")
 
 def extract_articulos():
-    """Extrae artículos de Farmatic"""
+    """Extrae artículos de Farmatic con nombres de laboratorio desde CONSEJO"""
     logger.info("Extrayendo artículos...")
 
     cnx = connect_sql(SQL_CONFIG["farmatic_db"])
+
+    # Query con JOIN a [CONSEJO].dbo.LABOR para obtener nombres
     query = """
     SELECT TOP 10000
         a.IdArticu AS Codigo,
@@ -66,11 +68,13 @@ def extract_articulos():
         a.PVP AS PVP,
         a.Pmc AS PMC,
         a.Laboratorio AS LaboratorioId,
-        NULL AS LaboratorioNombre,
+        ISNULL(l.NOMBRE, '') AS LaboratorioNombre,
         a.XFam_IdFamilia AS FamiliaId,
         NULL AS FamiliaNombre,
         GETDATE() AS FechaExtraccion
     FROM dbo.Articu a WITH (NOLOCK)
+    LEFT JOIN [Consejo].dbo.LABOR l WITH (NOLOCK)
+        ON a.Laboratorio = l.CODIGO
     WHERE a.IdArticu IS NOT NULL
     ORDER BY a.IdArticu
     """
