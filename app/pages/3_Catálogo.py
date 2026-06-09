@@ -108,6 +108,11 @@ else:
     df["PMC"] = pd.NA
     df["Margen"] = pd.NA
 
+# Convertir precios y márgenes a números
+for col in ["PVP", "PMC", "Margen", "PVP_Mercado"]:
+    if col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
 # Renombrar para claridad y mostrar
 rename_dict = {
     "PVP": "Precio Farmacia",
