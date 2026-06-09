@@ -29,6 +29,16 @@ logger = logging.getLogger(__name__)
 GOOGLE_SHEET_ID = "1_rn_2CTc8yEcnZUUei-ytKAEW0lph3QeUKojCS3WRd8"
 CREDENTIALS_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'google_credentials.json')
 
+def limpiar_infinitos(df):
+    """Limpia valores infinitos y NaN para JSON"""
+    df = df.copy()
+    for col in df.columns:
+        if df[col].dtype in ['float64', 'float32']:
+            # Reemplazar infinitos con 0 y NaN con vacío
+            df[col] = df[col].replace([float('inf'), float('-inf')], 0.0)
+            df[col] = df[col].fillna(0.0)
+    return df
+
 def get_sheets_client():
     """Autentica y devuelve cliente de Google Sheets"""
     try:
@@ -132,6 +142,9 @@ def main():
         input_path = os.path.join(os.path.dirname(__file__), 'recomendaciones.csv')
         df = pd.read_csv(input_path, sep=';', encoding='utf-8')
         logger.info(f"Leyendo {input_path} ({len(df)} filas)")
+
+        # Limpiar infinitos antes de publicar
+        df = limpiar_infinitos(df)
 
         # Autenticar
         client = get_sheets_client()
