@@ -54,10 +54,10 @@ def publicar_recomendaciones(client, df):
         # Limpiar
         ws.clear()
 
-        # Headers
-        headers = ['Codigo', 'Nombre', 'PVP', 'PMC', 'Laboratorio', 'LaboratorioNombre',
+        # Headers - solo usar columnas que existen
+        headers = [col for col in ['Codigo', 'Nombre', 'PVP', 'PMC', 'LaboratorioId', 'LaboratorioNombre',
                    'PrecioRecomendado', 'DeltaPrecio', 'DeltaPorcentaje', 'TipoCambio',
-                   'Margen', 'CategoriaMargen']
+                   'Margen', 'CategoriaMargen'] if col in df.columns]
 
         # Convertir a valores
         rows = [headers] + df[headers].fillna('').values.tolist()
@@ -79,9 +79,9 @@ def publicar_catalogo(client, df):
         # Limpiar
         ws.clear()
 
-        # Headers
-        headers = ['Codigo', 'Nombre', 'PVP', 'PMC', 'Laboratorio', 'LaboratorioNombre',
-                   'Margen', 'EsGenerico']
+        # Headers - solo usar columnas que existen
+        headers = [col for col in ['Codigo', 'Nombre', 'PVP', 'PMC', 'LaboratorioId', 'LaboratorioNombre',
+                   'Margen', 'EsGenerico'] if col in df.columns]
 
         # Convertir a valores
         rows = [headers] + df[headers].fillna('').values.tolist()
@@ -104,9 +104,13 @@ def publicar_laboratorios(client, df):
         ws.clear()
 
         # Deduplicar y limpiar laboratorios
-        df_labs = df[['Laboratorio', 'LaboratorioNombre']].dropna()
-        df_labs = df_labs[df_labs['Laboratorio'] != ''].drop_duplicates()
-        df_labs = df_labs.sort_values('Laboratorio')
+        df_labs = df[['LaboratorioId', 'LaboratorioNombre']].copy()
+        df_labs = df_labs.dropna(subset=['LaboratorioNombre'])
+        df_labs = df_labs[df_labs['LaboratorioNombre'] != ''].drop_duplicates()
+        df_labs = df_labs.sort_values('LaboratorioId')
+
+        # Renombrar para Google Sheets
+        df_labs = df_labs.rename(columns={'LaboratorioId': 'Laboratorio'})
 
         # Headers y datos
         headers = ['Laboratorio', 'LaboratorioNombre']
