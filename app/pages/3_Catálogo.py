@@ -78,105 +78,60 @@ df["CN"] = df["CN"].astype(str).str.strip()
 
 # Si hay recomendaciones, agregar datos de la farmacia
 if not rec.empty:
-    # Usar Ventas_365d si existe, sino Ventas_30d
-    cols_rec = ["IdArticulo", "PVP", "PrecioCoste", "MargenActual_Pct", "StockActual"]
-    if "Ventas_365d" in rec.columns:
-        cols_rec.append("Ventas_365d")
-    elif "Ventas_30d" in rec.columns:
-        cols_rec.append("Ventas_30d")
+    # Usar columnas que existen en el CSV publicado
+    cols_rec = ["Codigo", "PVP", "PMC", "Margen"]
+
+    # Agregar opcionales si existen
+    if "PrecioRecomendado" in rec.columns:
+        cols_rec.append("PrecioRecomendado")
+    if "TipoCambio" in rec.columns:
+        cols_rec.append("TipoCambio")
 
     # Agregar Laboratorio y LaboratorioNombre si existen (para enriquecer datos)
-    if "Laboratorio" in rec.columns:
-        cols_rec.append("Laboratorio")
+    if "LaboratorioId" in rec.columns:
+        cols_rec.append("LaboratorioId")
     if "LaboratorioNombre" in rec.columns:
         cols_rec.append("LaboratorioNombre")
 
+    # Filtrar solo columnas que existen
+    cols_rec = [c for c in cols_rec if c in rec.columns]
+
     rec_c = rec[cols_rec].copy()
-    rec_c["IdArticulo"] = rec_c["IdArticulo"].astype(str).str.strip()
-    rec_c = rec_c.rename(columns={"IdArticulo": "CN"})
+    rec_c["Codigo"] = rec_c["Codigo"].astype(str).str.strip()
+    rec_c = rec_c.rename(columns={"Codigo": "CN"})
 
     # Merge con los datos de la farmacia (left join en mercado para mantener todos)
     df = df.merge(rec_c, on="CN", how="left")
 else:
-    # Si no hay recomendaciones, crear columnas vacías
+    # Si no hay recomendaciones, crear columnas vacías con nombres correctos
     df["PVP"] = pd.NA
-    df["PrecioCoste"] = pd.NA
-    df["MargenActual_Pct"] = pd.NA
-    df["StockActual"] = pd.NA
-    df["Ventas_30d"] = pd.NA
+    df["PMC"] = pd.NA
+    df["Margen"] = pd.NA
 
-# Si pricing_base está disponible, enriquecer datos faltantes (para productos NO_TOCAR sin publicar)
-if pricing_base is not None:
-    # Para StockActual: usar pricing_base si Google Sheets tiene NaN
-    mask_stock_na = df["StockActual"].isna()
-    if mask_stock_na.any():
-        stock_from_base = df.loc[mask_stock_na, "CN"].map(
-            pricing_base.set_index("CN")["StockActual"]
-        )
-        df.loc[mask_stock_na, "StockActual"] = stock_from_base
-
-    # Para Ventas_365d: usar pricing_base si Google Sheets tiene NaN
-    if "Ventas_365d" in df.columns:
-        mask_ventas_na = df["Ventas_365d"].isna()
-        if mask_ventas_na.any():
-            ventas_from_base = df.loc[mask_ventas_na, "CN"].map(
-                pricing_base.set_index("CN")["Ventas_365d"]
-            )
-            df.loc[mask_ventas_na, "Ventas_365d"] = ventas_from_base
-
-# Renombrar para claridad
-rename_initial = {
-    "PVP": "Precio_Farmacia",
-    "PrecioCoste": "PUC_Farmacia",
-    "MargenActual_Pct": "Margen_Farmacia_Pct",
-    "StockActual": "Stock_Actual",
-}
-# Solo renombrar Ventas_30d si no existe Ventas_365d
-if "Ventas_365d" not in df.columns and "Ventas_30d" in df.columns:
-    rename_initial["Ventas_30d"] = "Ventas"
-
-df = df.rename(columns=rename_initial)
-
-# Recalcular margen usando la fórmula correcta: (PVP - PUC) / PVP * 100
-# Margen Farmacia con PVP actual
-df["Margen_Farmacia_Pct"] = (
-    ((df["Precio_Farmacia"] - df["PUC_Farmacia"]) / df["Precio_Farmacia"] * 100)
-    .round(1)
-)
-
-# Margen que tendrías si vendieras al precio de mercado (mismo coste)
-df["Margen_Mercado_Pct"] = (
-    ((df["PVP_Mercado"] - df["PUC_Farmacia"]) / df["PVP_Mercado"] * 100)
-    .round(1)
-)
-
-# Rellenar Stock_Actual con 0 si no tiene producto la farmacia (para productos del mercado sin stock local)
-df["Stock_Actual"] = df["Stock_Actual"].fillna(0).astype(int)
-
-# Rellenar Ventas si no tiene (para productos del mercado sin venta local)
-if "Ventas_365d" in df.columns:
-    df["Ventas_365d"] = df["Ventas_365d"].fillna(0).astype(int)
-else:
-    df["Ventas_30d"] = df["Ventas_30d"].fillna(0).astype(int) if "Ventas_30d" in df.columns else 0
-
-# Renombrar columnas para mostrar
+# Renombrar para claridad y mostrar
 rename_dict = {
-    "Precio_Farmacia": "Precio Farmacia",
+    "PVP": "Precio Farmacia",
+    "PMC": "Costo Farmacia",
+    "Margen": "Margen Farmacia (%)",
     "PVP_Mercado": "Precio Mercado",
-    "Margen_Farmacia_Pct": "Margen Farmacia (%)",
-    "Margen_Mercado_Pct": "Margen Mercado (%)",
+}
+
+# Renombrar si existen
+df = df.rename(columns={k: v for k, v in rename_dict.items() if k in df.columns})
+
+# Calcular margen de mercado si es posible
+if "Costo Farmacia" in df.columns and "Precio Mercado" in df.columns:
+    df["Margen Mercado (%)"] = (
+        ((df["Precio Mercado"] - df["Costo Farmacia"]) / df["Precio Mercado"] * 100)
+        .round(1)
+    )
+
+# Renombrar otras columnas si existen
+other_renames = {
     "Uds_por_Farmacia": "Uds Promedio Mercado",
     "Uds_Mercado": "Uds Totales Mercado",
-    "Stock_Actual": "Stock",
 }
-
-# Agregar el renombrado de ventas
-if "Ventas_365d" in df.columns:
-    rename_dict["Ventas_365d"] = "Ventas 12m"
-elif "Ventas_30d" in df.columns:
-    rename_dict["Ventas_30d"] = "Ventas 30d"
-
-df = df.rename(columns=rename_dict)
+df = df.rename(columns={k: v for k, v in other_renames.items() if k in df.columns})
 
 # Asegurar que LaboratorioNombre está en df
 # Intentar primero con lab_lookup (datos de Google Sheets)
@@ -186,9 +141,9 @@ if not lab_lookup.empty and "Laboratorio" in df.columns and "LaboratorioNombre" 
 
 # Si aún no tenemos LaboratorioNombre, intentar desde rec
 if "LaboratorioNombre" not in df.columns and not rec.empty and "LaboratorioNombre" in rec.columns:
-    rec_lab = rec[["IdArticulo", "LaboratorioNombre"]].copy()
-    rec_lab["IdArticulo"] = rec_lab["IdArticulo"].astype(str).str.strip()
-    rec_lab = rec_lab.rename(columns={"IdArticulo": "CN"})
+    rec_lab = rec[["Codigo", "LaboratorioNombre"]].copy()
+    rec_lab["Codigo"] = rec_lab["Codigo"].astype(str).str.strip()
+    rec_lab = rec_lab.rename(columns={"Codigo": "CN"})
     if "CN" in df.columns:
         df = df.merge(rec_lab, on="CN", how="left", suffixes=("", "_rec"))
         # Si tenía LaboratorioNombre de lab_lookup, mantener; sino usar de rec
