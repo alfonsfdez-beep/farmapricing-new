@@ -63,11 +63,11 @@ def extract_articulos():
     SELECT TOP 10000
         a.IdArticu AS Codigo,
         a.Descripcion AS Nombre,
-        a.PVPUnidad AS PVP,
-        a.PmcUnidad AS PMC,
+        a.PVP AS PVP,
+        a.Pmc AS PMC,
         a.Laboratorio AS LaboratorioId,
         NULL AS LaboratorioNombre,
-        a.Familia AS FamiliaId,
+        a.XFam_IdFamilia AS FamiliaId,
         NULL AS FamiliaNombre,
         GETDATE() AS FechaExtraccion
     FROM dbo.Articu a WITH (NOLOCK)
