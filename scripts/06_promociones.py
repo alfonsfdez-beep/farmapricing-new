@@ -315,7 +315,7 @@ def main():
 
                 # Aplicar nuevos descuentos
                 aplicar_descuento(cnx, codigo, dto_max, dto_def, modo_cod)
-                actualizar_estado(ws, idx, 'Aplicado', str(hoy))
+                actualizar_estado(ws, idx, 'Aplicado', datetime.now().strftime("%Y-%m-%d %H:%M"))
                 logger.info(f"✅ ACTIVADA: {codigo} {nombre} → DtoMax={dto_max}% DtoDef={dto_def}% "
                             f"Margen: {margen_antes}% → {margen_despues}%")
                 activadas += 1
@@ -328,7 +328,7 @@ def main():
                 orig_modo_cod = MODO_MAP.get(orig_modo, orig_modo)
 
                 aplicar_descuento(cnx, codigo, orig_max, orig_def, orig_modo_cod)
-                actualizar_estado(ws, idx, 'Finalizado', str(hoy))
+                actualizar_estado(ws, idx, 'Finalizado', datetime.now().strftime("%Y-%m-%d %H:%M"))
                 logger.info(f"🔄 REVERTIDA (fecha): {codigo} {nombre} → valores originales restaurados")
                 revertidas += 1
 
@@ -353,7 +353,7 @@ def main():
                 orig_modo_cod = MODO_MAP.get(orig_modo, orig_modo)
 
                 aplicar_descuento(cnx, codigo, orig_max, orig_def, orig_modo_cod)
-                actualizar_estado(ws, idx, 'Cancelado', str(hoy))
+                actualizar_estado(ws, idx, 'Cancelado', datetime.now().strftime("%Y-%m-%d %H:%M"))
                 logger.info(f"❌ CANCELADA: {codigo} {nombre} → valores originales restaurados")
                 revertidas += 1
 
