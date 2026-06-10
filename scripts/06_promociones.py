@@ -149,16 +149,16 @@ def leer_articulo(cnx, codigo):
         return float(row[0] or 0), float(row[1] or 0)
     return 0.0, 0.0
 
-def leer_ventas_30d(cnx, codigo):
-    """Devuelve unidades vendidas en los últimos 30 días."""
+def leer_ventas_desde(cnx, codigo, fecha_desde):
+    """Devuelve unidades vendidas desde fecha_desde hasta hoy."""
     cursor = cnx.cursor()
     cursor.execute("""
         SELECT ISNULL(SUM(l.Cantidad), 0)
         FROM dbo.Venta v WITH (NOLOCK)
         JOIN dbo.LineaVenta l WITH (NOLOCK) ON l.IdVenta = v.IdVenta
-        WHERE v.FechaHora >= DATEADD(DAY, -30, CAST(GETDATE() AS DATE))
+        WHERE v.FechaHora >= ?
           AND l.Codigo = ?
-    """, (str(codigo),))
+    """, (str(fecha_desde), str(codigo)))
     row = cursor.fetchone()
     return int(row[0]) if row else 0
 
@@ -193,6 +193,17 @@ def guardar_pvp_margenes(ws, fila_idx, pvp, pmc, margen_antes, margen_despues, u
                 ws.update_cell(fila_sheet, col_idx, str(value))
     except Exception as e:
         logger.warning(f"⚠ No se pudieron guardar PVP/márgenes fila {fila_idx+2}: {e}")
+
+def actualizar_uds_vendidas(ws, fila_idx, uds):
+    """Actualiza solo la columna Uds_Vendidas en el Sheet."""
+    try:
+        fila_sheet = fila_idx + 2
+        headers = ws.row_values(1)
+        if 'Uds_Vendidas' in headers:
+            col_idx = headers.index('Uds_Vendidas') + 1
+            ws.update_cell(fila_sheet, col_idx, str(uds))
+    except Exception as e:
+        logger.warning(f"⚠ No se pudo actualizar Uds_Vendidas fila {fila_idx+2}: {e}")
 
 
 # ── Leer/Escribir descuentos en SQL ───────────────────────────────────────────
@@ -292,22 +303,21 @@ def main():
                 orig_max, orig_def, orig_modo = leer_descuento_actual(cnx, codigo)
                 guardar_valores_originales(ws, idx, orig_max or 0, orig_def or 0, orig_modo or 'F')
 
-                # Leer PVP, PMC y ventas del artículo
+                # Leer PVP y PMC del artículo
                 pvp, pmc = leer_articulo(cnx, codigo)
-                uds_30d  = leer_ventas_30d(cnx, codigo)
 
                 # Calcular márgenes antes y después de la promo
                 margen_antes   = calcular_margen(pvp, pmc, orig_def or 0)
                 margen_despues = calcular_margen(pvp, pmc, dto_def)
 
-                # Guardar PVP, PMC, márgenes y ventas en el Sheet
-                guardar_pvp_margenes(ws, idx, pvp, pmc, margen_antes, margen_despues, uds_30d)
+                # Guardar PVP, PMC, márgenes y ventas=0 al inicio (se actualizarán cada día)
+                guardar_pvp_margenes(ws, idx, pvp, pmc, margen_antes, margen_despues, uds_vendidas=0)
 
                 # Aplicar nuevos descuentos
                 aplicar_descuento(cnx, codigo, dto_max, dto_def, modo_cod)
                 actualizar_estado(ws, idx, 'Aplicado', str(hoy))
                 logger.info(f"✅ ACTIVADA: {codigo} {nombre} → DtoMax={dto_max}% DtoDef={dto_def}% "
-                            f"Margen: {margen_antes}% → {margen_despues}% | Ventas30d={uds_30d}")
+                            f"Margen: {margen_antes}% → {margen_despues}%")
                 activadas += 1
 
             # ── REVERTIR promo al acabar (por fecha) ──────────────────────
@@ -321,6 +331,19 @@ def main():
                 actualizar_estado(ws, idx, 'Finalizado', str(hoy))
                 logger.info(f"🔄 REVERTIDA (fecha): {codigo} {nombre} → valores originales restaurados")
                 revertidas += 1
+
+            # ── ACTUALIZAR ventas de promo activa (ejecución diaria) ──────
+            elif estado == 'Aplicado' and not (f_fin and hoy > f_fin):
+                # Leer FechaAplicado para contar ventas desde ese día
+                fecha_aplicado_str = str(row.get('FechaAplicado', '')).strip()
+                try:
+                    f_aplicado = datetime.strptime(fecha_aplicado_str, "%Y-%m-%d").date()
+                except:
+                    f_aplicado = hoy  # fallback: desde hoy
+
+                uds = leer_ventas_desde(cnx, codigo, f_aplicado)
+                actualizar_uds_vendidas(ws, idx, uds)
+                logger.info(f"📊 SEGUIMIENTO: {codigo} {nombre} → Uds_Vendidas desde {f_aplicado}: {uds}")
 
             # ── CANCELAR manualmente (escribir 'Cancelar' en Estado) ──────
             elif estado == 'Cancelar':
