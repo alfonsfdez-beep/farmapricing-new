@@ -49,10 +49,10 @@ $trigger = New-ScheduledTaskTrigger `
 
 # Configuración: sin ventana, timeout 5 min, arrancar aunque no haya sesión
 $settings = New-ScheduledTaskSettingsSet `
-    -ExecutionTimeLimit  (New-TimeSpan -Minutes 5) `
-    -MultipleInstances   IgnoreNew `
-    -StartWhenAvailable  $true `
-    -Hidden              $true
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 5) `
+    -MultipleInstances  IgnoreNew `
+    -StartWhenAvailable `
+    -Hidden
 
 # Principal: usuario actual con permisos elevados
 $principal = New-ScheduledTaskPrincipal `
