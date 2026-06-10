@@ -44,8 +44,7 @@ $action = New-ScheduledTaskAction `
 $trigger = New-ScheduledTaskTrigger `
     -Once `
     -At (Get-Date) `
-    -RepetitionInterval  (New-TimeSpan -Minutes 30) `
-    -RepetitionDuration  ([TimeSpan]::MaxValue)
+    -RepetitionInterval (New-TimeSpan -Minutes 30)
 
 # Configuración: sin ventana, timeout 5 min, arrancar aunque no haya sesión
 $settings = New-ScheduledTaskSettingsSet `
