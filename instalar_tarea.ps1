@@ -1,12 +1,13 @@
 # ============================================================
-# Instala la tarea programada de Gestión de Promociones
+# Instala la tarea programada de Gestion de Promociones
 # Ejecutar UNA SOLA VEZ como Administrador
 # ============================================================
 
 $TASK_NAME  = "FarmaPromo_30min"
 $SCRIPT_DIR = "C:\Users\Admin\Dropbox\Archivos Alfonso\Buzon\Buzon Claude\Aplicaciones\Farmapricing_Agent_v2"
+$BAT_FILE   = "$SCRIPT_DIR\run_promociones.bat"
 
-# Buscar pythonw automáticamente
+# Buscar pythonw automaticamente
 $cmd = Get-Command pythonw -ErrorAction SilentlyContinue
 $PYTHONW = if ($cmd) { $cmd.Source } else { $null }
 if (-not $PYTHONW) {
@@ -29,33 +30,27 @@ if (-not $PYTHONW) {
 
 Write-Host "Usando: $PYTHONW" -ForegroundColor Cyan
 
-# Comando completo para schtasks
-$CMD = "`"$PYTHONW`" `"$SCRIPT_DIR\scripts\06_promociones.py`""
+# Crear fichero .bat intermedio (evita problemas con espacios en rutas)
+$batContent = "@echo off`r`ncd /d `"$SCRIPT_DIR`"`r`n`"$PYTHONW`" scripts\06_promociones.py`r`n"
+Set-Content -Path $BAT_FILE -Value $batContent -Encoding ASCII
+Write-Host "Creado: $BAT_FILE" -ForegroundColor Cyan
 
 # Eliminar tarea anterior si existe
-schtasks /delete /tn $TASK_NAME /f 2>$null
+schtasks /delete /tn $TASK_NAME /f 2>$null | Out-Null
 
-# Crear tarea: cada 30 minutos, en segundo plano, indefinidamente
-schtasks /create `
-    /tn  $TASK_NAME `
-    /tr  $CMD `
-    /sc  MINUTE `
-    /mo  30 `
-    /sd  (Get-Date -Format "dd/MM/yyyy") `
-    /st  (Get-Date -Format "HH:mm") `
-    /rl  HIGHEST `
-    /f
+# Programar el .bat cada 30 minutos
+$result = schtasks /create /tn $TASK_NAME /tr $BAT_FILE /sc MINUTE /mo 30 /rl HIGHEST /f 2>&1
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host ""
     Write-Host "OK Tarea '$TASK_NAME' registrada correctamente." -ForegroundColor Green
-    Write-Host "   Se ejecutara cada 30 minutos en segundo plano." -ForegroundColor Green
+    Write-Host "   Se ejecutara cada 30 min en segundo plano (sin ventana)." -ForegroundColor Green
     Write-Host "   Log en: $SCRIPT_DIR\scripts\promociones.log" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "Comandos utiles:" -ForegroundColor Cyan
-    Write-Host "  Ver estado:     schtasks /query /tn '$TASK_NAME'"
-    Write-Host "  Ejecutar ahora: schtasks /run /tn '$TASK_NAME'"
-    Write-Host "  Desinstalar:    schtasks /delete /tn '$TASK_NAME' /f"
+    Write-Host "  Ver estado:     schtasks /query /tn $TASK_NAME"
+    Write-Host "  Ejecutar ahora: schtasks /run /tn $TASK_NAME"
+    Write-Host "  Desinstalar:    schtasks /delete /tn $TASK_NAME /f"
 } else {
-    Write-Host "ERROR al registrar la tarea." -ForegroundColor Red
+    Write-Host "ERROR al registrar la tarea: $result" -ForegroundColor Red
 }
