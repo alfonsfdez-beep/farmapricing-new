@@ -3,15 +3,13 @@
 # Ejecutar UNA SOLA VEZ como Administrador
 # ============================================================
 
-$TASK_NAME   = "FarmaPromo_30min"
-$SCRIPT_DIR  = "C:\Users\Admin\Dropbox\Archivos Alfonso\Buzon\Buzon Claude\Aplicaciones\Farmapricing_Agent_v2"
-$SCRIPT_PATH = "scripts\06_promociones.py"
+$TASK_NAME  = "FarmaPromo_30min"
+$SCRIPT_DIR = "C:\Users\Admin\Dropbox\Archivos Alfonso\Buzon\Buzon Claude\Aplicaciones\Farmapricing_Agent_v2"
 
 # Buscar pythonw automáticamente
 $cmd = Get-Command pythonw -ErrorAction SilentlyContinue
 $PYTHONW = if ($cmd) { $cmd.Source } else { $null }
 if (-not $PYTHONW) {
-    # Intentar rutas habituales
     $candidatos = @(
         "$env:LOCALAPPDATA\Programs\Python\Python312\pythonw.exe",
         "$env:LOCALAPPDATA\Programs\Python\Python311\pythonw.exe",
@@ -25,55 +23,39 @@ if (-not $PYTHONW) {
 }
 
 if (-not $PYTHONW) {
-    Write-Host "ERROR: No se encontró pythonw.exe. Instala Python con la opción 'Add to PATH'." -ForegroundColor Red
+    Write-Host "ERROR: No se encontro pythonw.exe." -ForegroundColor Red
     exit 1
 }
 
 Write-Host "Usando: $PYTHONW" -ForegroundColor Cyan
 
+# Comando completo para schtasks
+$CMD = "`"$PYTHONW`" `"$SCRIPT_DIR\scripts\06_promociones.py`""
+
 # Eliminar tarea anterior si existe
-Unregister-ScheduledTask -TaskName $TASK_NAME -Confirm:$false -ErrorAction SilentlyContinue
+schtasks /delete /tn $TASK_NAME /f 2>$null
 
-# Acción: ejecutar pythonw sin ventana
-$action = New-ScheduledTaskAction `
-    -Execute $PYTHONW `
-    -Argument $SCRIPT_PATH `
-    -WorkingDirectory $SCRIPT_DIR
+# Crear tarea: cada 30 minutos, en segundo plano, indefinidamente
+schtasks /create `
+    /tn  $TASK_NAME `
+    /tr  $CMD `
+    /sc  MINUTE `
+    /mo  30 `
+    /sd  (Get-Date -Format "dd/MM/yyyy") `
+    /st  (Get-Date -Format "HH:mm") `
+    /rl  HIGHEST `
+    /f
 
-# Trigger: cada 30 minutos indefinidamente
-$trigger = New-ScheduledTaskTrigger `
-    -Once `
-    -At (Get-Date) `
-    -RepetitionInterval (New-TimeSpan -Minutes 30)
-
-# Configuración: sin ventana, timeout 5 min, arrancar aunque no haya sesión
-$settings = New-ScheduledTaskSettingsSet `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 5) `
-    -MultipleInstances  IgnoreNew `
-    -StartWhenAvailable `
-    -Hidden
-
-# Principal: usuario actual con permisos elevados
-$principal = New-ScheduledTaskPrincipal `
-    -UserId    $env:USERNAME `
-    -RunLevel  Highest `
-    -LogonType Interactive
-
-# Registrar
-Register-ScheduledTask `
-    -TaskName   $TASK_NAME `
-    -Action     $action `
-    -Trigger    $trigger `
-    -Settings   $settings `
-    -Principal  $principal `
-    -Description "Gestión automática de promociones Farmapricing (cada 30 min)"
-
-Write-Host ""
-Write-Host "✅ Tarea '$TASK_NAME' registrada correctamente." -ForegroundColor Green
-Write-Host "   Se ejecutará cada 30 minutos en segundo plano." -ForegroundColor Green
-Write-Host "   Log en: $SCRIPT_DIR\scripts\promociones.log" -ForegroundColor Yellow
-Write-Host ""
-Write-Host "Comandos útiles:" -ForegroundColor Cyan
-Write-Host "  Ver estado:      Get-ScheduledTask -TaskName '$TASK_NAME'"
-Write-Host "  Ejecutar ahora:  Start-ScheduledTask -TaskName '$TASK_NAME'"
-Write-Host "  Desinstalar:     Unregister-ScheduledTask -TaskName '$TASK_NAME' -Confirm:`$false"
+if ($LASTEXITCODE -eq 0) {
+    Write-Host ""
+    Write-Host "OK Tarea '$TASK_NAME' registrada correctamente." -ForegroundColor Green
+    Write-Host "   Se ejecutara cada 30 minutos en segundo plano." -ForegroundColor Green
+    Write-Host "   Log en: $SCRIPT_DIR\scripts\promociones.log" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Comandos utiles:" -ForegroundColor Cyan
+    Write-Host "  Ver estado:     schtasks /query /tn '$TASK_NAME'"
+    Write-Host "  Ejecutar ahora: schtasks /run /tn '$TASK_NAME'"
+    Write-Host "  Desinstalar:    schtasks /delete /tn '$TASK_NAME' /f"
+} else {
+    Write-Host "ERROR al registrar la tarea." -ForegroundColor Red
+}
