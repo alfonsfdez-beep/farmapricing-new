@@ -43,9 +43,9 @@ def get_recomendaciones() -> pd.DataFrame:
     if df.empty:
         return df
     numeric = [
-        "PVP", "PrecioCoste", "MargenActual_Pct",
+        "PVP", "PMC", "Stock", "PrecioCoste", "MargenActual_Pct",
         "PVP_Mercado", "DeltaPctMercado", "PVP_Propuesto", "Descuento_Pct",
-        "Ventas_30d", "Ventas_365d", "StockActual", "DiasStock",
+        "Ventas_90d", "Ventas_365d", "StockActual", "DiasStock",
         "Impacto_Facturacion_30d_est", "Impacto_Margen_30d_est",
         "BreakEven_Uplift_Pct",
     ]
@@ -69,9 +69,9 @@ def get_catalogo_todos() -> pd.DataFrame:
         return df
 
     numeric = [
-        "PVP", "PrecioCoste", "MargenActual_Pct",
+        "PVP", "PMC", "Stock", "PrecioCoste", "MargenActual_Pct",
         "PVP_Mercado", "DeltaPctMercado", "PVP_Propuesto", "Descuento_Pct",
-        "Ventas_30d", "Ventas_365d", "StockActual", "DiasStock",
+        "Ventas_90d", "Ventas_365d", "StockActual", "DiasStock",
         "Impacto_Facturacion_30d_est", "Impacto_Margen_30d_est",
         "BreakEven_Uplift_Pct",
     ]

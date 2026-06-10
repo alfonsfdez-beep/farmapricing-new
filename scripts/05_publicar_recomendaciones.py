@@ -65,9 +65,13 @@ def publicar_recomendaciones(client, df):
         ws.clear()
 
         # Headers - solo usar columnas que existen
-        headers = [col for col in ['Codigo', 'Nombre', 'PVP', 'PMC', 'LaboratorioId', 'LaboratorioNombre',
+        headers = [col for col in ['Codigo', 'Nombre', 'PVP', 'PMC', 'Stock', 'Ventas_90d',
+                   'LaboratorioId', 'LaboratorioNombre',
+                   'DtoMaximo', 'DtoPorDefecto', 'TipoDescuento', 'MargenFamilia',
                    'PrecioRecomendado', 'DeltaPrecio', 'DeltaPorcentaje', 'TipoCambio',
-                   'Margen', 'CategoriaMargen'] if col in df.columns]
+                   'Margen', 'CategoriaMargen',
+                   'PVP_Mercado', 'Familia', 'Subfamilia',
+                   'Impacto_Margen_30d_est', 'Impacto_Facturacion_30d_est'] if col in df.columns]
 
         # Convertir a valores
         rows = [headers] + df[headers].fillna('').values.tolist()
@@ -90,7 +94,8 @@ def publicar_catalogo(client, df):
         ws.clear()
 
         # Headers - solo usar columnas que existen
-        headers = [col for col in ['Codigo', 'Nombre', 'PVP', 'PMC', 'LaboratorioId', 'LaboratorioNombre',
+        headers = [col for col in ['Codigo', 'Nombre', 'PVP', 'PMC', 'Stock', 'Ventas_90d',
+                   'LaboratorioId', 'LaboratorioNombre',
                    'Margen', 'EsGenerico'] if col in df.columns]
 
         # Convertir a valores

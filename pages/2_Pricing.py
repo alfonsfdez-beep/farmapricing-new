@@ -57,7 +57,17 @@ with f3:
     fam_sel = st.multiselect("Familia", fam_options, default=[])
 with f4:
     q = st.text_input("🔍 Buscar (CN o descripción)", "")
+
+# ── Filtros adicionales (segunda fila) ──────────────────────────────────────────
+f5, f6, f7 = st.columns([2, 2, 2])
+
+with f5:
+    solo_ventas = st.checkbox("🔥 Solo con ventas últimos 30d", value=False,
+                              help="Muestra solo productos con ventas en los últimos 30 días")
+with f6:
     incluir_decididos = st.checkbox("Incluir ya decididos", value=False)
+with f7:
+    st.write("")  # Espaciador
 
 # ── Aplicar filtros ───────────────────────────────────────────────────────────
 df = accionables.copy()
@@ -69,6 +79,8 @@ if tipo_sel:
     df = df[df["TipoCambio"].isin(tipo_sel)]
 if fam_sel:
     df = df[df["Familia"].isin(fam_sel)]
+if solo_ventas and "Ventas_90d" in df.columns:
+    df = df[(df["Ventas_90d"] > 0) | (df["Ventas_90d"].isna() == False)]
 if q:
     ql = q.lower()
     df = df[

@@ -60,7 +60,7 @@ def extract_articulos():
 
     cnx = connect_sql(SQL_CONFIG["farmatic_db"])
 
-    # Query con JOIN a [CONSEJO].dbo.LABOR para obtener nombres
+    # Query con JOIN a [CONSEJO].dbo.LABOR y vRG_Articu para obtener laboratorios y descuentos
     query = """
     SELECT TOP 10000
         a.IdArticu AS Codigo,
@@ -71,10 +71,26 @@ def extract_articulos():
         ISNULL(l.NOMBRE, '') AS LaboratorioNombre,
         a.XFam_IdFamilia AS FamiliaId,
         NULL AS FamiliaNombre,
+        ISNULL(a.StockActual, 0) AS Stock,
+        ISNULL(d.DtoMax, 0) AS DtoMaximo,
+        ISNULL(d.DtoDef, 0) AS DtoPorDefecto,
+        CASE d.Aplicacion
+            WHEN 'A' THEN 'Automático'
+            WHEN 'M' THEN 'Manual'
+            WHEN 'F' THEN 'De Familia'
+            WHEN 'C' THEN 'Con Aviso'
+            WHEN 'D' THEN 'Deshabilitado'
+            ELSE ISNULL(d.Aplicacion, '')
+        END AS TipoDescuento,
+        ISNULL(f.pctoMargenFam, 0) AS MargenFamilia,
         GETDATE() AS FechaExtraccion
     FROM dbo.Articu a WITH (NOLOCK)
     LEFT JOIN [Consejo].dbo.LABOR l WITH (NOLOCK)
         ON a.Laboratorio = l.CODIGO
+    LEFT JOIN dbo.Descuento d WITH (NOLOCK)
+        ON d.IdCodigo = a.IdArticu AND d.IdTipo = 'ART'
+    LEFT JOIN dbo.vRG_Familia f WITH (NOLOCK)
+        ON f.IdFamilia = a.XFam_IdFamilia
     WHERE a.IdArticu IS NOT NULL
     ORDER BY a.IdArticu
     """
@@ -142,6 +158,33 @@ def extract_laboratorios():
     logger.warning("⚠ No se extrajeron laboratorios")
     return pd.DataFrame(columns=['Laboratorio', 'LaboratorioNombre'])
 
+def extract_ventas_90d():
+    """Extrae ventas de los últimos 90 días agrupadas por artículo"""
+    logger.info("Extrayendo ventas de los últimos 90 días...")
+
+    cnx = connect_sql(SQL_CONFIG["farmatic_db"])
+
+    query = """
+    SELECT
+        l.Codigo AS Codigo,
+        SUM(l.Cantidad) AS Ventas_90d
+    FROM dbo.Venta v WITH (NOLOCK)
+    JOIN dbo.LineaVenta l WITH (NOLOCK) ON l.IdVenta = v.IdVenta
+    WHERE v.FechaHora >= DATEADD(DAY, -90, CAST(GETDATE() AS DATE))
+      AND l.Codigo IS NOT NULL
+    GROUP BY l.Codigo
+    """
+
+    try:
+        df = pd.read_sql_query(query, cnx)
+        logger.info(f"✓ Extrayeron ventas de {len(df)} artículos en últimos 90 días")
+        return df
+    except Exception as e:
+        logger.warning(f"⚠ Error extrayendo ventas: {e}")
+        return pd.DataFrame(columns=['Codigo', 'Ventas_90d'])
+    finally:
+        cnx.close()
+
 def main():
     logger.info("="*60)
     logger.info("INICIO EXTRACCIÓN SQL SERVER")
@@ -151,6 +194,7 @@ def main():
         # Extraer datos
         df_articulos = extract_articulos()
         df_labs = extract_laboratorios()
+        df_ventas = extract_ventas_90d()
 
         # Mapear laboratorios
         lab_map = dict(zip(df_labs['Laboratorio'].astype(str), df_labs['LaboratorioNombre']))
@@ -159,6 +203,20 @@ def main():
         # Log de NaN (sin rellenar en este script)
         nan_count = df_articulos['LaboratorioNombre'].isna().sum()
         logger.info(f"LaboratorioNombre: {nan_count} NaN (sin rellenar en Script 01)")
+
+        # ── Mapear ventas de últimos 90 días ──────────────────────────────
+        if not df_ventas.empty:
+            # Convertir Codigo a string en ambos para asegurar merge correcto
+            df_articulos['Codigo'] = df_articulos['Codigo'].astype(str).str.strip()
+            df_ventas['Codigo'] = df_ventas['Codigo'].astype(str).str.strip()
+
+            # LEFT JOIN para mapear ventas
+            df_articulos = df_articulos.merge(df_ventas, on='Codigo', how='left')
+            con_ventas = df_articulos['Ventas_90d'].notna().sum()
+            logger.info(f"✓ Mapeadas ventas para {con_ventas}/{len(df_articulos)} artículos")
+        else:
+            df_articulos['Ventas_90d'] = None
+            logger.info("⚠ No se obtuvieron datos de ventas")
 
         # Guardar CSV
         output_path = os.path.join(os.path.dirname(__file__), 'pricing_base.csv')
