@@ -8,7 +8,8 @@ $SCRIPT_DIR  = "C:\Users\Admin\Dropbox\Archivos Alfonso\Buzon\Buzon Claude\Aplic
 $SCRIPT_PATH = "scripts\06_promociones.py"
 
 # Buscar pythonw automáticamente
-$PYTHONW = (Get-Command pythonw -ErrorAction SilentlyContinue)?.Source
+$cmd = Get-Command pythonw -ErrorAction SilentlyContinue
+$PYTHONW = if ($cmd) { $cmd.Source } else { $null }
 if (-not $PYTHONW) {
     # Intentar rutas habituales
     $candidatos = @(
