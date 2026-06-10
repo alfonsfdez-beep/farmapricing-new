@@ -7,7 +7,8 @@ descuentos en SQL Server (dbo.Descuento) según fechas de activación.
 
 Columnas esperadas en Google Sheets (pestaña 'Promociones'):
   Codigo | Nombre | DtoMax | DtoDef | Modo | FechaInicio | FechaFin |
-  DtoMax_Original | DtoDef_Original | Modo_Original | Estado | FechaAplicado | Notas
+  DtoMax_Original | PVP | PMC | DtoDef_Original | Margen_Antes | Margen_Despues |
+  Uds_Vendidas | Modo_Original | Estado | FechaAplicado | Notas
 """
 
 import sys
@@ -135,6 +136,65 @@ def guardar_valores_originales(ws, fila_idx, dto_max_orig, dto_def_orig, modo_or
         logger.warning(f"⚠ No se pudieron guardar originales fila {fila_idx+2}: {e}")
 
 
+# ── Leer datos del artículo desde SQL ─────────────────────────────────────────
+def leer_articulo(cnx, codigo):
+    """Devuelve (PVP, PMC) del artículo desde dbo.Articu."""
+    cursor = cnx.cursor()
+    cursor.execute(
+        "SELECT PVP, Pmc FROM dbo.Articu WHERE IdArticu = ?",
+        (str(codigo),)
+    )
+    row = cursor.fetchone()
+    if row:
+        return float(row[0] or 0), float(row[1] or 0)
+    return 0.0, 0.0
+
+def leer_ventas_30d(cnx, codigo):
+    """Devuelve unidades vendidas en los últimos 30 días."""
+    cursor = cnx.cursor()
+    cursor.execute("""
+        SELECT ISNULL(SUM(l.Cantidad), 0)
+        FROM dbo.Venta v WITH (NOLOCK)
+        JOIN dbo.LineaVenta l WITH (NOLOCK) ON l.IdVenta = v.IdVenta
+        WHERE v.FechaHora >= DATEADD(DAY, -30, CAST(GETDATE() AS DATE))
+          AND l.Codigo = ?
+    """, (str(codigo),))
+    row = cursor.fetchone()
+    return int(row[0]) if row else 0
+
+def calcular_margen(pvp, pmc, dto_def):
+    """Calcula margen considerando el descuento aplicado al cliente.
+    Margen = (PVP_cliente - PMC) / PVP_cliente * 100
+    donde PVP_cliente = PVP * (1 - DtoDef/100)
+    """
+    try:
+        pvp_cliente = float(pvp) * (1 - float(dto_def) / 100)
+        if pvp_cliente <= 0:
+            return 0.0
+        return round((pvp_cliente - float(pmc)) / pvp_cliente * 100, 2)
+    except:
+        return 0.0
+
+def guardar_pvp_margenes(ws, fila_idx, pvp, pmc, margen_antes, margen_despues, uds_vendidas):
+    """Guarda PVP, PMC, márgenes y unidades vendidas en el Sheet."""
+    try:
+        fila_sheet = fila_idx + 2
+        headers = ws.row_values(1)
+        datos = {
+            'PVP':            round(pvp, 2),
+            'PMC':            round(pmc, 2),
+            'Margen_Antes':   margen_antes,
+            'Margen_Despues': margen_despues,
+            'Uds_Vendidas':   uds_vendidas,
+        }
+        for col_name, value in datos.items():
+            if col_name in headers:
+                col_idx = headers.index(col_name) + 1
+                ws.update_cell(fila_sheet, col_idx, str(value))
+    except Exception as e:
+        logger.warning(f"⚠ No se pudieron guardar PVP/márgenes fila {fila_idx+2}: {e}")
+
+
 # ── Leer/Escribir descuentos en SQL ───────────────────────────────────────────
 def leer_descuento_actual(cnx, codigo):
     """Devuelve (DtoMax, DtoDef, Aplicacion) actuales del artículo."""
@@ -232,10 +292,22 @@ def main():
                 orig_max, orig_def, orig_modo = leer_descuento_actual(cnx, codigo)
                 guardar_valores_originales(ws, idx, orig_max or 0, orig_def or 0, orig_modo or 'F')
 
+                # Leer PVP, PMC y ventas del artículo
+                pvp, pmc = leer_articulo(cnx, codigo)
+                uds_30d  = leer_ventas_30d(cnx, codigo)
+
+                # Calcular márgenes antes y después de la promo
+                margen_antes   = calcular_margen(pvp, pmc, orig_def or 0)
+                margen_despues = calcular_margen(pvp, pmc, dto_def)
+
+                # Guardar PVP, PMC, márgenes y ventas en el Sheet
+                guardar_pvp_margenes(ws, idx, pvp, pmc, margen_antes, margen_despues, uds_30d)
+
                 # Aplicar nuevos descuentos
                 aplicar_descuento(cnx, codigo, dto_max, dto_def, modo_cod)
                 actualizar_estado(ws, idx, 'Aplicado', str(hoy))
-                logger.info(f"✅ ACTIVADA: {codigo} {nombre} → DtoMax={dto_max}% DtoDef={dto_def}% Modo={modo_str}")
+                logger.info(f"✅ ACTIVADA: {codigo} {nombre} → DtoMax={dto_max}% DtoDef={dto_def}% "
+                            f"Margen: {margen_antes}% → {margen_despues}% | Ventas30d={uds_30d}")
                 activadas += 1
 
             # ── REVERTIR promo al acabar (por fecha) ──────────────────────
