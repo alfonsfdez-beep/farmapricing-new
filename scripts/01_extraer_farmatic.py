@@ -102,6 +102,80 @@ def extract_articulos():
     finally:
         cnx.close()
 
+def extract_familias():
+    """Extrae nombres de familia desde Farmatic.
+    Busca dinámicamente en INFORMATION_SCHEMA tablas con 'FAMILIA' en el nombre
+    que tengan columna de id + descripción. Devuelve dict {id: nombre}."""
+    logger.info("Extrayendo familias...")
+    cnx = connect_sql(SQL_CONFIG["farmatic_db"])
+
+    ID_CANDIDATES   = ('idfamilia', 'codigo', 'codfamilia', 'id', 'idfam')
+    DESC_CANDIDATES = ('descripcion', 'descripción', 'nombre', 'description',
+                       'desc', 'familia', 'nombrefamilia', 'descfamilia', 'nombrefam')
+
+    def probe_table(tbl):
+        try:
+            df_s = pd.read_sql_query(f"SELECT TOP 3 * FROM {tbl} WITH (NOLOCK)", cnx)
+            if df_s.empty:
+                return None, None
+            cl = {c.lower(): c for c in df_s.columns}
+            id_col   = next((cl[c] for c in ID_CANDIDATES   if c in cl), None)
+            desc_col = next((cl[c] for c in DESC_CANDIDATES if c in cl and cl[c] != id_col), None)
+            if not desc_col:
+                for c in df_s.columns:
+                    if c != id_col and df_s[c].dtype == object:
+                        if df_s[c].dropna().astype(str).str.len().gt(1).any():
+                            desc_col = c
+                            break
+            return id_col, desc_col
+        except:
+            return None, None
+
+    # Buscar tablas con FAMILIA en el nombre
+    tables = ['dbo.FamiliaAux']
+    try:
+        df_tbls = pd.read_sql_query(
+            "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES "
+            "WHERE UPPER(TABLE_NAME) LIKE '%FAMILIA%' AND TABLE_TYPE='BASE TABLE'",
+            cnx
+        )
+        for t in df_tbls['TABLE_NAME'].tolist():
+            if f'dbo.{t}' not in tables:
+                tables.append(f'dbo.{t}')
+    except:
+        pass
+    for t in ('dbo.Familia', 'dbo.GrupoFamilia', 'dbo.FamiliaArticulo'):
+        if t not in tables:
+            tables.append(t)
+
+    fam_map = {}
+    for tbl in tables:
+        id_col, desc_col = probe_table(tbl)
+        if id_col and desc_col:
+            try:
+                df = pd.read_sql_query(
+                    f"SELECT {id_col}, {desc_col} FROM {tbl} WITH (NOLOCK)", cnx
+                )
+                for _, row in df.iterrows():
+                    try:
+                        fid = int(float(str(row[id_col])))
+                        fname = str(row[desc_col]).strip() if pd.notna(row[desc_col]) else ''
+                        if fname:
+                            fam_map[fid] = fname
+                    except:
+                        pass
+                if fam_map:
+                    logger.info(f"✓ {len(fam_map)} familias desde {tbl} ({id_col}/{desc_col})")
+                    break
+            except Exception as e:
+                logger.warning(f"⚠ {tbl}: {e}")
+
+    cnx.close()
+    if not fam_map:
+        logger.warning("⚠ No se encontraron nombres de familia")
+    return fam_map
+
+
 def extract_laboratorios():
     """Extrae laboratorios de ambas BD"""
     logger.info("Extrayendo laboratorios...")
@@ -193,12 +267,32 @@ def main():
     try:
         # Extraer datos
         df_articulos = extract_articulos()
-        df_labs = extract_laboratorios()
-        df_ventas = extract_ventas_90d()
+        df_labs      = extract_laboratorios()
+        df_ventas    = extract_ventas_90d()
+        fam_map      = extract_familias()
 
         # Mapear laboratorios
         lab_map = dict(zip(df_labs['Laboratorio'].astype(str), df_labs['LaboratorioNombre']))
         df_articulos['LaboratorioNombre'] = df_articulos['LaboratorioId'].astype(str).map(lab_map)
+
+        # Mapear nombre de familia
+        df_articulos['FamiliaId_int'] = pd.to_numeric(df_articulos['FamiliaId'], errors='coerce')
+        df_articulos['FamiliaNombre'] = df_articulos['FamiliaId_int'].apply(
+            lambda fid: fam_map.get(int(fid), '') if pd.notna(fid) else ''
+        )
+        df_articulos.drop(columns=['FamiliaId_int'], inplace=True)
+
+        # Calcular Margen = (PVP - PMC) / PVP * 100
+        def calc_margen(row):
+            try:
+                pvp = float(str(row['PVP']).replace(',', '.'))
+                pmc = float(str(row['PMC']).replace(',', '.'))
+                if pvp > 0:
+                    return round((pvp - pmc) / pvp * 100, 2)
+            except:
+                pass
+            return None
+        df_articulos['Margen'] = df_articulos.apply(calc_margen, axis=1)
 
         # Log de NaN (sin rellenar en este script)
         nan_count = df_articulos['LaboratorioNombre'].isna().sum()

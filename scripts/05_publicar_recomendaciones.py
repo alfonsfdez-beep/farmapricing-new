@@ -107,6 +107,33 @@ def publicar_catalogo(client, df):
     except Exception as e:
         logger.warning(f"⚠ Error publicando Catálogo: {e}")
 
+def publicar_catalogo_productos(client, df):
+    """Publica catálogo completo para uso en Promociones (VLOOKUP) en Catalogo_Productos."""
+    logger.info("Publicando Catalogo_Productos...")
+    try:
+        sheet = client.open_by_key(GOOGLE_SHEET_ID)
+        try:
+            ws = sheet.worksheet("Catalogo_Productos")
+        except Exception:
+            ws = sheet.add_worksheet(title="Catalogo_Productos", rows=15000, cols=20)
+            logger.info("✓ Pestaña 'Catalogo_Productos' creada")
+
+        ws.clear()
+
+        headers = [col for col in [
+            'Codigo', 'Nombre', 'Stock', 'PVP', 'PMC', 'Margen',
+            'LaboratorioNombre', 'FamiliaId', 'FamiliaNombre',
+            'DtoMaximo', 'DtoPorDefecto', 'TipoDescuento'
+        ] if col in df.columns]
+
+        rows = [headers] + df[headers].fillna('').values.tolist()
+        ws.append_rows(rows, value_input_option='RAW')
+        logger.info(f"✓ Publicados {len(df)} productos en 'Catalogo_Productos'")
+
+    except Exception as e:
+        logger.warning(f"⚠ Error publicando Catalogo_Productos: {e}")
+
+
 def publicar_laboratorios(client, df):
     """Publica tabla de laboratorios única en Laboratorios_Lookup"""
     logger.info("Publicando laboratorios...")
@@ -154,10 +181,11 @@ def main():
         # Autenticar
         client = get_sheets_client()
 
-        # Publicar a tres pestañas
+        # Publicar a cuatro pestañas
         publicar_recomendaciones(client, df)
         publicar_catalogo(client, df)
         publicar_laboratorios(client, df)
+        publicar_catalogo_productos(client, df)
 
         logger.info("="*60)
         logger.info("PUBLICACION COMPLETADA")
