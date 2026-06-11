@@ -1,11 +1,12 @@
 # ============================================================
 # Instala la tarea programada de Gestion de Promociones
 # Ejecutar UNA SOLA VEZ como Administrador
+# Sin ventana negra: usa VBScript como lanzador invisible
 # ============================================================
 
 $TASK_NAME  = "FarmaPromo_30min"
 $SCRIPT_DIR = "C:\Users\Admin\Dropbox\Archivos Alfonso\Buzon\Buzon Claude\Aplicaciones\Farmapricing_Agent_v2"
-$BAT_FILE   = "$SCRIPT_DIR\run_promociones.bat"
+$VBS_FILE   = "C:\FarmaPromo\run_promociones.vbs"
 
 # Buscar pythonw automaticamente
 $cmd = Get-Command pythonw -ErrorAction SilentlyContinue
@@ -30,21 +31,27 @@ if (-not $PYTHONW) {
 
 Write-Host "Usando: $PYTHONW" -ForegroundColor Cyan
 
-# Crear fichero .bat intermedio (evita problemas con espacios en rutas)
-$batContent = "@echo off`r`ncd /d `"$SCRIPT_DIR`"`r`n`"$PYTHONW`" scripts\06_promociones.py`r`n"
-Set-Content -Path $BAT_FILE -Value $batContent -Encoding ASCII
-Write-Host "Creado: $BAT_FILE" -ForegroundColor Cyan
+# Crear carpeta sin espacios
+New-Item -ItemType Directory -Force -Path "C:\FarmaPromo" | Out-Null
+
+# Crear VBScript — el parametro 0 en oShell.Run = SW_HIDE (sin ventana)
+$vbsContent = @"
+Set oShell = CreateObject("WScript.Shell")
+oShell.Run """$PYTHONW"" ""$SCRIPT_DIR\scripts\06_promociones.py""", 0, False
+"@
+Set-Content -Path $VBS_FILE -Value $vbsContent -Encoding ASCII
+Write-Host "Creado: $VBS_FILE" -ForegroundColor Cyan
 
 # Eliminar tarea anterior si existe
 schtasks /delete /tn $TASK_NAME /f 2>$null | Out-Null
 
-# Programar el .bat cada 30 minutos
-$result = schtasks /create /tn $TASK_NAME /tr $BAT_FILE /sc MINUTE /mo 30 /rl HIGHEST /f 2>&1
+# Programar el VBS con wscript.exe (invisible por naturaleza)
+$result = schtasks /create /tn $TASK_NAME /tr "wscript.exe ""$VBS_FILE""" /sc MINUTE /mo 30 /rl HIGHEST /f 2>&1
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host ""
     Write-Host "OK Tarea '$TASK_NAME' registrada correctamente." -ForegroundColor Green
-    Write-Host "   Se ejecutara cada 30 min en segundo plano (sin ventana)." -ForegroundColor Green
+    Write-Host "   Se ejecutara cada 30 min SIN ventana negra." -ForegroundColor Green
     Write-Host "   Log en: $SCRIPT_DIR\scripts\promociones.log" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "Comandos utiles:" -ForegroundColor Cyan
