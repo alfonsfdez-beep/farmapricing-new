@@ -120,15 +120,30 @@ def publicar_catalogo_productos(client, df):
 
         ws.clear()
 
-        headers = [col for col in [
-            'Codigo', 'Nombre', 'Stock', 'PVP', 'PMC', 'Margen',
-            'LaboratorioNombre', 'FamiliaId', 'FamiliaNombre',
-            'DtoMaximo', 'DtoPorDefecto', 'TipoDescuento'
-        ] if col in df.columns]
+        # Columnas deseadas en orden
+        col_order = ['Codigo', 'Nombre', 'Stock', 'PVP', 'PMC', 'Margen',
+                     'LaboratorioNombre', 'FamiliaId', 'FamiliaNombre',
+                     'DtoMaximo', 'DtoPorDefecto', 'TipoDescuento']
+        headers = [col for col in col_order if col in df.columns]
 
-        rows = [headers] + df[headers].fillna('').values.tolist()
+        df_cat = df[headers].copy()
+
+        # Columnas de texto: forzar string para evitar que NaN → 0 por limpiar_infinitos
+        str_cols = ['Nombre', 'LaboratorioNombre', 'FamiliaNombre', 'TipoDescuento']
+        for col in str_cols:
+            if col in df_cat.columns:
+                df_cat[col] = df_cat[col].fillna('').astype(str).str.strip()
+                df_cat[col] = df_cat[col].replace({'nan': '', '0': '', '0.0': ''})
+
+        # Columnas numéricas: rellenar NaN con 0
+        num_cols = ['Stock', 'PVP', 'PMC', 'Margen', 'DtoMaximo', 'DtoPorDefecto']
+        for col in num_cols:
+            if col in df_cat.columns:
+                df_cat[col] = pd.to_numeric(df_cat[col], errors='coerce').fillna(0)
+
+        rows = [headers] + df_cat.fillna('').values.tolist()
         ws.append_rows(rows, value_input_option='RAW')
-        logger.info(f"✓ Publicados {len(df)} productos en 'Catalogo_Productos'")
+        logger.info(f"✓ Publicados {len(df_cat)} productos en 'Catalogo_Productos'")
 
     except Exception as e:
         logger.warning(f"⚠ Error publicando Catalogo_Productos: {e}")
