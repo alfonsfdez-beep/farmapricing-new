@@ -62,7 +62,7 @@ def extract_articulos():
 
     # Query con JOIN a [CONSEJO].dbo.LABOR y vRG_Articu para obtener laboratorios y descuentos
     query = """
-    SELECT TOP 10000
+    SELECT
         a.IdArticu AS Codigo,
         a.Descripcion AS Nombre,
         a.PVP AS PVP,
